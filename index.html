@@ -1,0 +1,2041 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>量房工具</title>
+<script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root {
+  --bg: #f5f5f7;
+  --white: #ffffff;
+  --border: #d2d2d7;
+  --border-light: #e8e8ed;
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #aeaeb2;
+  --blue: #0071e3;
+  --blue-light: #e8f2fd;
+  --red: #ff3b30;
+  --green: #34c759;
+  --orange: #ff9500;
+  --purple: #af52de;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --radius-pill: 980px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.06);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,.12);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== HEADER ===== */
+.header {
+  background: rgba(255,255,255,.72);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border-bottom: .5px solid rgba(0,0,0,.08);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 20;
+  flex-shrink: 0;
+}
+.header-icon { font-size: 22px; line-height: 1; }
+.header-title {
+  font-size: 16px;
+  font-weight: 690;
+  letter-spacing: -.022em;
+  color: var(--text);
+  white-space: nowrap;
+}
+.header input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  outline: none;
+  text-align: center;
+  min-width: 0;
+  letter-spacing: -.01em;
+}
+.header input::placeholder { color: var(--text-tertiary); }
+.header-actions { display: flex; gap: 5px; flex-shrink: 0; }
+
+/* ===== CANVAS ===== */
+.canvas-area {
+  height: 52dvh;
+  min-height: 220px;
+  flex-shrink: 0;
+  position: relative;
+  background: #fafafa;
+  overflow: hidden;
+}
+.canvas-area canvas {
+  position: absolute;
+  top: 0; left: 0;
+  display: block;
+}
+
+/* Mode badge */
+.mode-badge {
+  position: absolute;
+  top: 14px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(29,29,31,.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+  padding: 6px 18px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 590;
+  letter-spacing: -.01em;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity .28s ease;
+}
+.mode-badge.v-enter-from, .mode-badge.v-leave-to { opacity: 0; }
+
+.scale-badge {
+  position: absolute;
+  bottom: 12px; right: 14px;
+  background: rgba(255,255,255,.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 510;
+  color: var(--text-secondary);
+  letter-spacing: -.01em;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* ===== DESKTOP COMPASS (bottom-left, fixed) ===== */
+.compass {
+  position: absolute;
+  left: 16px;
+  bottom: 54px;
+  background: rgba(255,255,255,.86);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.compass-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.compass-dir {
+  width: 40px; height: 40px;
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  transition: all .12s ease;
+}
+.compass-dir:active { background: var(--blue-light); border-color: var(--blue); transform: scale(.94); }
+.compass-dir.z-btn { font-size: 12px; font-weight: 690; letter-spacing: -.01em; }
+.compass-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  width: 100%;
+}
+.compass-actions .btn { flex: 1; font-size: 11px; padding: 6px 8px; }
+.compass-input {
+  width: 100%;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.compass-input input {
+  flex: 1;
+  width: 60px;
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  text-align: center;
+  font-weight: 590;
+  outline: none;
+  min-width: 0;
+  background: var(--white);
+}
+.compass-input input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(0,113,227,.1);
+}
+.compass-input .cu { font-size: 10px; color: var(--text-tertiary); }
+
+/* Zoom (moved above compass) */
+.zoom-stack-compass {
+  position: absolute;
+  left: 16px;
+  bottom: 12px;
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+}
+.zoom-btn {
+  width: 32px; height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 16px;
+  font-weight: 510;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  transition: all .12s ease;
+}
+.zoom-btn:active { background: #e8e8ed; transform: scale(.94); }
+
+.empty-state {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  text-align: center;
+  pointer-events: none;
+}
+.empty-icon { font-size: 44px; margin-bottom: 10px; }
+.empty-title { font-size: 16px; font-weight: 590; color: var(--text); letter-spacing: -.01em; margin-bottom: 4px; }
+.empty-desc { font-size: 13px; color: var(--text-tertiary); line-height: 1.5; letter-spacing: -.01em; }
+
+.photo-dot {
+  position: absolute;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--orange);
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  cursor: pointer;
+  z-index: 4;
+  transform: translate(-50%,-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  transition: transform .12s ease;
+}
+.photo-dot:active { transform: translate(-50%,-50%) scale(1.2); }
+
+/* ===== PANEL ===== */
+.panel-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255,255,255,.88);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  overflow: hidden;
+  min-height: 0;
+  border-top: .5px solid rgba(0,0,0,.08);
+}
+
+.panel-tabs {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: .5px solid var(--border-light);
+  padding: 0 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.panel-tabs::-webkit-scrollbar { display: none; }
+.panel-tab {
+  padding: 13px 14px;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 510;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  letter-spacing: -.01em;
+  position: relative;
+  transition: color .15s ease;
+}
+.panel-tab.active {
+  color: var(--blue);
+  font-weight: 590;
+}
+.panel-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%; right: 20%;
+  height: 2.5px;
+  background: var(--blue);
+  border-radius: 2px;
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  padding-bottom: calc(20px + var(--safe-bottom));
+}
+
+/* ===== BUTTONS ===== */
+.btn {
+  padding: 10px 18px;
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 590;
+  letter-spacing: -.01em;
+  transition: all .12s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.btn:active { transform: scale(.96); }
+.btn-primary { background: var(--blue); color: #fff; }
+.btn-primary:active { background: #0066cc; }
+.btn-secondary { background: #f2f2f7; color: var(--text); }
+.btn-secondary:active { background: #e5e5ea; }
+.btn-outline { background: var(--white); border: 1px solid var(--border); color: var(--text); }
+.btn-outline:active { background: #f5f5f7; }
+.btn-danger { background: var(--red); color: #fff; }
+.btn-sm { padding: 6px 14px; font-size: 12px; border-radius: var(--radius-pill); }
+.btn-xs { padding: 3px 10px; font-size: 11px; border-radius: var(--radius-pill); }
+
+/* ===== WALL LIST ===== */
+.wall-list-empty {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: 32px 16px;
+}
+.wall-list-empty .wl-icon { font-size: 36px; margin-bottom: 8px; }
+.wall-list-empty .wl-text { font-size: 14px; letter-spacing: -.01em; }
+.wall-card {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+  gap: 10px;
+  cursor: pointer;
+  transition: all .15s ease;
+  border: 2px solid transparent;
+  background: var(--white);
+  box-shadow: var(--shadow-sm);
+}
+.wall-card:active { background: #f5f5f7; transform: scale(.985); }
+.wall-card.selected { background: var(--blue-light); border-color: var(--blue); }
+.wall-idx {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: #e8e8ed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 690;
+  flex-shrink: 0;
+  letter-spacing: -.01em;
+  color: var(--text-secondary);
+}
+.wall-card.selected .wall-idx { background: var(--blue); color: #fff; }
+.wall-dir-icon { font-size: 18px; flex-shrink: 0; width: 26px; text-align: center; }
+.wall-len {
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-weight: 590;
+  font-size: 15px;
+  flex: 1;
+  min-width: 0;
+  letter-spacing: -.02em;
+}
+.wall-tags { display: flex; gap: 5px; flex-shrink: 0; }
+.wall-tag-dot { width: 10px; height: 10px; border-radius: 50%; }
+.wall-tag-dot.door   { background: var(--orange); }
+.wall-tag-dot.window { background: var(--green); }
+.wall-tag-dot.photo  { background: var(--purple); }
+.wall-del-btn {
+  width: 30px; height: 30px;
+  border: 0; background: none;
+  color: var(--text-tertiary);
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all .12s ease;
+}
+.wall-del-btn:active { color: var(--red); background: rgba(255,59,48,.08); }
+
+/* ===== DETAIL / NOTES / PHOTOS ===== */
+.detail-block { margin-bottom: 20px; }
+.detail-block-title {
+  font-size: 11px;
+  font-weight: 690;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.detail-row label {
+  flex-shrink: 0;
+  width: 42px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 510;
+  letter-spacing: -.01em;
+}
+.detail-row select, .detail-row input {
+  flex: 1;
+  padding: 9px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  letter-spacing: -.01em;
+  outline: none;
+  background: var(--white);
+  min-width: 0;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.detail-row select:focus, .detail-row input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(0,113,227,.1);
+}
+.elev-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.elev-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.elev-field label { font-size: 11px; color: var(--text-secondary); font-weight: 590; letter-spacing: -.01em; }
+.elev-field input {
+  padding: 9px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  letter-spacing: -.01em;
+  outline: none;
+  background: var(--white);
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+.elev-field input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,113,227,.1); }
+
+.marker-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: #f9f9fb;
+  margin-bottom: 6px;
+  font-size: 12px;
+  flex-wrap: wrap;
+  letter-spacing: -.01em;
+}
+.marker-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 690;
+  flex-shrink: 0;
+  letter-spacing: .02em;
+}
+.marker-badge.bump   { background: #fff3e0; color: #e65100; }
+.marker-badge.dent   { background: #e3f2fd; color: #01579b; }
+.marker-badge.beam   { background: #fce4ec; color: #880e4f; }
+.marker-badge.pillar { background: #f3e5f5; color: #6a1b9a; }
+.marker-badge.corner { background: #fff8e1; color: #f57f17; }
+.marker-badge.other  { background: #f5f5f7; color: var(--text-secondary); }
+.marker-del {
+  margin-left: auto;
+  border: 0; background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 16px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.marker-del:active { color: var(--red); background: rgba(255,59,48,.08); }
+.textarea-field {
+  width: 100%;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-size: 14px;
+  font-family: inherit;
+  letter-spacing: -.01em;
+  resize: vertical;
+  outline: none;
+  min-height: 64px;
+  background: var(--white);
+  transition: border-color .15s ease, box-shadow .15s ease;
+  line-height: 1.5;
+}
+.textarea-field:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,113,227,.1); }
+.textarea-field::placeholder { color: var(--text-tertiary); }
+
+.photo-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 0;
+  scrollbar-width: none;
+}
+.photo-strip::-webkit-scrollbar { display: none; }
+.photo-thumb {
+  width: 80px; height: 80px;
+  border-radius: var(--radius-md);
+  background-size: cover;
+  background-position: center;
+  flex-shrink: 0;
+  position: relative;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform .12s ease;
+}
+.photo-thumb:active { transform: scale(.96); }
+.photo-thumb-del {
+  position: absolute;
+  top: -5px; right: -5px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  border: 0;
+  font-size: 11px;
+  font-weight: 590;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,.15);
+}
+.photo-add {
+  width: 80px; height: 80px;
+  border-radius: var(--radius-md);
+  border: 1.5px dashed var(--border);
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 510;
+  letter-spacing: -.01em;
+  transition: all .12s ease;
+}
+.photo-add:active { background: #f5f5f7; }
+.photo-add .pa-icon { font-size: 24px; line-height: 1; }
+
+/* ===== STATS BAR ===== */
+.stats-bar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: .5px solid var(--border-light);
+  font-size: 11px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stats-bar::-webkit-scrollbar { display: none; }
+.stat-chip {
+  background: #f2f2f7;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 510;
+  color: var(--text-secondary);
+  letter-spacing: -.01em;
+}
+.stat-chip .sv {
+  font-weight: 690;
+  color: var(--text);
+  font-family: 'SF Mono', 'Menlo', monospace;
+  letter-spacing: -.02em;
+}
+
+/* ===== TOAST ===== */
+.toast-enter-active { animation: toastIn .28s ease; }
+.toast-leave-active { animation: toastOut .22s ease; }
+@keyframes toastIn  { from { opacity:0; transform:translateY(14px) scale(.94); } to { opacity:1; transform:translateY(0) scale(1); } }
+@keyframes toastOut { from { opacity:1; } to { opacity:0; } }
+.toast-bar {
+  position: fixed;
+  bottom: calc(90px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(29,29,31,.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #fff;
+  padding: 10px 22px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 590;
+  letter-spacing: -.01em;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: 0 8px 32px rgba(0,0,0,.16);
+}
+
+/* ===== PHOTO MODAL ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.88);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn .2s ease;
+}
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+.modal-overlay img {
+  max-width: 94vw;
+  max-height: 84vh;
+  border-radius: var(--radius-lg);
+  object-fit: contain;
+}
+.modal-close-btn {
+  position: absolute;
+  top: 18px; right: 18px;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.16);
+  border: 0;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 400;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .12s ease;
+}
+.modal-close-btn:active { background: rgba(255,255,255,.28); }
+
+/* Import drop zone */
+.imp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,113,227,.08);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+.imp-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  padding: 32px 40px;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  max-width: 340px;
+}
+.imp-card .ic-icon { font-size: 44px; margin-bottom: 12px; }
+.imp-card .ic-title { font-size: 17px; font-weight: 690; margin-bottom: 4px; letter-spacing: -.01em; }
+.imp-card .ic-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; letter-spacing: -.01em; }
+
+/* ===== PRINT ===== */
+@media print {
+  body { background: #fff; }
+  .header, .panel-area, .mode-badge, .scale-badge, .compass, .zoom-stack-compass, .toast-bar, .modal-overlay { display: none !important; }
+  .canvas-area { height: auto !important; overflow: visible !important; background: #fff; }
+  .canvas-area canvas { position: static !important; }
+  @page { size: A4; margin: 8mm; }
+}
+
+/* ===== DESKTOP ===== */
+@media (min-width: 768px) {
+  #app { flex-direction: row; }
+  .header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: rgba(255,255,255,.64);
+  }
+  .canvas-area {
+    flex: 1;
+    height: 100dvh;
+    min-height: auto;
+  }
+  .panel-area {
+    width: 410px;
+    height: 100dvh;
+    flex: none;
+    border-top: 0;
+    border-left: .5px solid rgba(0,0,0,.08);
+  }
+  /* On desktop, hide the old zoom-stack and show compass version */
+  .zoom-stack-compass { display: flex; }
+}
+
+/* Mobile: show compass too but smaller, hide it if too cramped */
+@media (max-width: 767px) {
+  .compass { left: 8px; bottom: 48px; padding: 7px; gap: 4px; }
+  .compass-dir { width: 34px; height: 34px; font-size: 15px; }
+  .compass-dir.z-btn { font-size: 10px; }
+  .compass-input input { width: 50px; font-size: 11px; padding: 4px 6px; }
+  .compass-actions .btn { font-size: 10px; padding: 4px 6px; }
+  .zoom-stack-compass { left: 8px; bottom: 8px; }
+  .zoom-btn { width: 28px; height: 28px; font-size: 14px; }
+}
+</style>
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ========== HEADER ========== -->
+  <div class="header">
+    <span class="header-icon">📐</span>
+    <span class="header-title">量房工具</span>
+    <input type="text" v-model="projectName" placeholder="项目名称…">
+    <div class="header-actions">
+      <button class="btn btn-sm btn-outline" @click="exportProject">📦 打包</button>
+      <button class="btn btn-sm btn-outline" @click="triggerImport">📥 导入</button>
+      <button class="btn btn-sm btn-outline" @click="closeRoom" :disabled="isRoomClosed">闭合</button>
+      <button class="btn btn-sm btn-primary" @click="exportJPG">JPG</button>
+      <button class="btn btn-sm btn-outline" @click="exportPDF">PDF</button>
+    </div>
+  </div>
+
+  <!-- ========== CANVAS ========== -->
+  <div class="canvas-area" ref="canvasWrap"
+    @touchstart.prevent="onCanvasTouch"
+    @touchmove.prevent="onCanvasTouch"
+    @touchend.prevent="onCanvasTouchEnd"
+    @mousedown="onCanvasMouse"
+    @mousemove="onCanvasMouse"
+    @mouseup="onCanvasMouseUp"
+    @wheel.prevent="onCanvasWheel"
+    @dragover.prevent
+    @drop.prevent="onDropImport">
+    <canvas ref="canvasEl"></canvas>
+
+    <transition name="v">
+      <div class="mode-badge" v-if="modeText">{{ modeText }}</div>
+    </transition>
+    <div class="scale-badge">比例 1:{{ scaleRatio }}</div>
+
+    <!-- Compass: XYZ direction + add/undo, fixed at bottom-left -->
+    <div class="compass">
+      <div class="compass-row">
+        <button class="compass-dir" @click.stop="addWall('left')"  title="左 X−">←</button>
+        <button class="compass-dir" @click.stop="addWall('up')"    title="上 Y−">↑</button>
+        <button class="compass-dir" @click.stop="addWall('right')" title="右 X+">→</button>
+      </div>
+      <div class="compass-row">
+        <button class="compass-dir z-btn" @click.stop="addWall('z')" title="高 Z">Z</button>
+        <button class="compass-dir" @click.stop="addWall('down')" title="下 Y+">↓</button>
+      </div>
+      <div class="compass-input">
+        <input type="number" v-model.number="compassLen" step="100" min="10" placeholder="3000"
+          @keyup.enter="activeDir&&addWall(activeDir)">
+        <span class="cu">mm</span>
+      </div>
+      <div class="compass-actions">
+        <button class="btn btn-primary" @click.stop="activeDir&&addWall(activeDir)" style="flex:1.5">添加</button>
+        <button class="btn btn-secondary" @click.stop="undoWall">↩</button>
+      </div>
+    </div>
+
+    <div class="zoom-stack-compass">
+      <button class="zoom-btn" @click.stop="zoom(1.25)">+</button>
+      <button class="zoom-btn" @click.stop="zoom(0.8)">−</button>
+      <button class="zoom-btn" @click.stop="zoomFit">⊡</button>
+    </div>
+
+    <div class="empty-state" v-if="walls.length === 0">
+      <div class="empty-icon">📐</div>
+      <div class="empty-title">开始测量</div>
+      <div class="empty-desc">输入尺寸后点击方向键<br>或在画布上从端点拖拽绘制</div>
+    </div>
+
+    <div class="photo-dot" v-for="(pm, pi) in photoMarkers" :key="pi"
+      :style="{ left: pm.x + 'px', top: pm.y + 'px' }"
+      @click="previewPhoto(pm.dataUrl)">📷</div>
+  </div>
+
+  <!-- ========== PANEL ========== -->
+  <div class="panel-area">
+    <div class="panel-tabs">
+      <button class="panel-tab" :class="{ active: activeTab==='list' }"   @click="activeTab='list'">墙体</button>
+      <button class="panel-tab" :class="{ active: activeTab==='detail' }" @click="activeTab='detail'" v-if="selWall">属性</button>
+      <button class="panel-tab" :class="{ active: activeTab==='notes' }"  @click="activeTab='notes'"  v-if="selWall">备注</button>
+      <button class="panel-tab" :class="{ active: activeTab==='photos' }" @click="activeTab='photos'" v-if="selWall">照片</button>
+    </div>
+
+    <!-- ===== WALL LIST ===== -->
+    <div class="panel-content" v-if="activeTab==='list'">
+      <div class="wall-list-empty" v-if="walls.length===0">
+        <div class="wl-icon">📋</div>
+        <div class="wl-text">暂无墙体数据</div>
+        <div style="font-size:12px;color:var(--text-tertiary);margin-top:4px;">使用左下角罗盘添加墙体</div>
+      </div>
+      <div class="wall-card" v-for="(w,i) in walls" :key="i"
+        :class="{ selected: i===selIdx }"
+        @click="selectWall(i)">
+        <div class="wall-idx">{{ i+1 }}</div>
+        <div class="wall-dir-icon">{{ dirMap[w.direction]?.icon || '?' }}</div>
+        <div class="wall-len">{{ fmtMm(w.length) }}</div>
+        <div class="wall-tags">
+          <span class="wall-tag-dot door"   v-if="w.door&&w.door!=='none'"></span>
+          <span class="wall-tag-dot window" v-if="w.window&&w.window!=='none'"></span>
+          <span class="wall-tag-dot photo"  v-if="w.photos&&w.photos.length"></span>
+        </div>
+        <button class="wall-del-btn" @click.stop="deleteWall(i)">×</button>
+      </div>
+      <div v-if="walls.length>0" style="margin-top:12px;">
+        <button class="btn btn-danger btn-sm" @click="clearAll" style="width:100%">清空全部墙体</button>
+      </div>
+    </div>
+
+    <!-- ===== DETAIL ===== -->
+    <div class="panel-content" v-if="activeTab==='detail' && selWall">
+      <div class="detail-block">
+        <div class="detail-block-title">门窗设置</div>
+        <div class="detail-row">
+          <label>门</label>
+          <select v-model="selWall.door" @change="save">
+            <option value="none">无门</option>
+            <option value="start">靠起点</option>
+            <option value="middle">居中</option>
+            <option value="end">靠终点</option>
+          </select>
+        </div>
+        <div class="detail-row">
+          <label>窗</label>
+          <select v-model="selWall.window" @change="save">
+            <option value="none">无窗</option>
+            <option value="start">靠起点</option>
+            <option value="middle">居中</option>
+            <option value="end">靠终点</option>
+          </select>
+        </div>
+        <div class="detail-row">
+          <label>长度</label>
+          <input type="number" v-model.number="selWall.length" step="10" min="10" @change="save">
+          <span style="font-size:12px;color:var(--text-secondary);">mm</span>
+        </div>
+      </div>
+      <div class="detail-block">
+        <div class="detail-block-title">高程信息 (mm)</div>
+        <div class="elev-grid">
+          <div class="elev-field"><label>梁底高</label>
+            <input type="number" v-model.number="selWall.elevation.beamBottom" step="10" min="0" placeholder="2200" @change="save"></div>
+          <div class="elev-field"><label>窗台高</label>
+            <input type="number" v-model.number="selWall.elevation.windowSill" step="10" min="0" placeholder="900" @change="save"></div>
+          <div class="elev-field"><label>窗顶高</label>
+            <input type="number" v-model.number="selWall.elevation.windowTop" step="10" min="0" placeholder="2100" @change="save"></div>
+          <div class="elev-field"><label>门高</label>
+            <input type="number" v-model.number="selWall.elevation.doorHeight" step="10" min="0" placeholder="2100" @change="save"></div>
+        </div>
+      </div>
+      <div class="detail-block">
+        <div class="detail-block-title">不规则标记</div>
+        <div v-if="!selWall.markers||selWall.markers.length===0"
+          style="font-size:13px;color:var(--text-tertiary);margin-bottom:8px;letter-spacing:-.01em;">暂无标记</div>
+        <div class="marker-card" v-for="(m,mi) in selWall.markers" :key="mi">
+          <span class="marker-badge" :class="m.type">{{ markerLabels[m.type]||m.type }}</span>
+          <span style="font-size:11px;color:var(--text-secondary);">位置&nbsp;{{ (m.position*100).toFixed(0) }}%</span>
+          <span v-if="m.offset" style="font-size:11px;color:var(--text-secondary);">偏移&nbsp;{{ fmtMm(m.offset) }}</span>
+          <span v-if="m.height" style="font-size:11px;color:var(--text-secondary);">高差&nbsp;{{ fmtMm(m.height) }}</span>
+          <button class="marker-del" @click="selWall.markers.splice(mi,1);save()">×</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" @click="addMarker" style="width:100%;margin-top:6px;">+ 添加标记</button>
+      </div>
+    </div>
+
+    <!-- ===== NOTES ===== -->
+    <div class="panel-content" v-if="activeTab==='notes' && selWall">
+      <div class="detail-block">
+        <div class="detail-block-title">墙面备注</div>
+        <textarea class="textarea-field" v-model="selWall.notes"
+          placeholder="记录这面墙的特殊情况：管井位置、不平整、转角细节…" @change="save"></textarea>
+      </div>
+      <div class="detail-block">
+        <div class="detail-block-title">高程备注</div>
+        <textarea class="textarea-field" v-model="selWall.elevation.special"
+          placeholder="梁、门洞、窗洞等高度相关备注…" @change="save" style="min-height:48px;"></textarea>
+      </div>
+    </div>
+
+    <!-- ===== PHOTOS ===== -->
+    <div class="panel-content" v-if="activeTab==='photos' && selWall">
+      <div class="detail-block">
+        <div class="detail-block-title">现场照片
+          <span style="font-weight:460;color:var(--text-tertiary);">&nbsp;{{ selWall.photos ? selWall.photos.length : 0 }} 张</span>
+        </div>
+        <div class="photo-strip">
+          <div class="photo-thumb" v-for="(p,pi) in selWall.photos" :key="pi"
+            :style="{ backgroundImage: 'url('+p+')' }"
+            @click="previewPhoto(p)">
+            <button class="photo-thumb-del" @click.stop="removePhoto(pi)">×</button>
+          </div>
+          <button class="photo-add" @click="takePhoto"><span class="pa-icon">📷</span><span>拍照</span></button>
+          <button class="photo-add" @click="pickPhoto"><span class="pa-icon">🖼</span><span>相册</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== STATS ===== -->
+    <div class="stats-bar">
+      <span class="stat-chip">墙体 <span class="sv">{{ walls.length }}</span></span>
+      <span class="stat-chip">周长 <span class="sv">{{ fmtMm(perimeter) }}</span></span>
+      <span class="stat-chip">面积 <span class="sv">{{ areaText }}</span></span>
+      <span class="stat-chip">层高 <span class="sv">{{ heightText }}</span></span>
+    </div>
+  </div>
+
+  <!-- ========== PHOTO MODAL ========== -->
+  <div class="modal-overlay" v-if="previewUrl" @click="previewUrl=null">
+    <img :src="previewUrl" @click.stop>
+    <button class="modal-close-btn" @click="previewUrl=null">×</button>
+  </div>
+
+  <!-- ========== IMPORT OVERLAY ========== -->
+  <div class="imp-overlay" v-if="showImport" @click.self="showImport=false">
+    <div class="imp-card">
+      <div class="ic-icon">📥</div>
+      <div class="ic-title">导入项目</div>
+      <div class="ic-desc">选择 .zip 项目文件或<br>拖放文件到画布区域</div>
+      <button class="btn btn-primary btn-sm" @click="clickImportFile" style="margin-right:6px;">选择文件</button>
+      <button class="btn btn-secondary btn-sm" @click="showImport=false">取消</button>
+    </div>
+  </div>
+
+  <!-- ========== TOAST ========== -->
+  <transition name="toast">
+    <div class="toast-bar" v-if="toastMsg">{{ toastMsg }}</div>
+  </transition>
+
+  <!-- Hidden inputs -->
+  <input type="file" accept="image/*" capture="environment" ref="cameraInput"  style="display:none" @change="onPhotoTaken">
+  <input type="file" accept="image/*"                    ref="galleryInput" style="display:none" @change="onPhotoTaken">
+  <input type="file" accept=".zip,application/zip"       ref="importInput"  style="display:none" @change="onImportFile">
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
+
+createApp({
+  setup() {
+    // ── State ──
+    const projectName = ref(localStorage.getItem('rt2_projectName') || '未命名项目');
+    const walls = reactive(loadWalls());
+    const selIdx = ref(walls.length > 0 ? walls.length - 1 : -1);
+    const activeTab = ref('list');
+    const compassLen = ref(3000);
+    const activeDir = ref('right');
+    const toastMsg = ref('');
+    let toastTimer = null;
+    const previewUrl = ref(null);
+    const modeText = ref('');
+    const showImport = ref(false);
+
+    // Canvas state — pxPerMm: pixels per millimeter
+    const pxPerMm = ref(0.08);
+    const panX = ref(0);
+    const panY = ref(0);
+
+    // Auto-center state
+    let userPanned = false;         // true = user has manually moved the view
+    let idleSinceLastAdd = 0;       // timestamp of last wall add
+    let idleCheckInterval = null;   // interval timer
+
+    // Interaction flags
+    let isPanning = false;
+    let isDragging = false;
+    let panStart = { x:0, y:0 };
+    let panStartOffset = { x:0, y:0 };
+    let dragDir = null;
+    let dragLength = 0;
+    let touches0 = null;
+
+    // DOM refs
+    const canvasEl = ref(null);
+    const canvasWrap = ref(null);
+    const cameraInput = ref(null);
+    const galleryInput = ref(null);
+    const importInput = ref(null);
+
+    // ── Constants ──
+    const dirVectors = {
+      right:{ dx:1, dy:0 }, left:{ dx:-1, dy:0 },
+      down:{ dx:0, dy:1 },  up:{ dx:0, dy:-1 },
+      z:{ dx:0, dy:0 },
+    };
+
+    const dirMap = {
+      right:{ icon:'→' }, left:{ icon:'←' },
+      down:{ icon:'↓' },  up:{ icon:'↑' },
+      z:{ icon:'↕' },
+      right:{ icon:'→' }, left:{ icon:'←' },
+      down:{ icon:'↓' },  up:{ icon:'↑' },
+      z:{ icon:'↕' },
+    };
+
+    const markerLabels = {
+      bump:'凸起', dent:'凹陷', beam:'梁', pillar:'柱', corner:'转角', other:'其他'
+    };
+
+    // ── Formatting ──
+    function fmtMm(val) {
+      if (val == null || isNaN(val)) return '—';
+      const n = Math.round(val);
+      if (n >= 1000000) return (n/1000000).toFixed(2) + ' km';
+      if (n >= 1000) return (n/1000).toFixed(2) + ' m';
+      return n.toLocaleString() + ' mm';
+    }
+
+    // ── Computed ──
+    const selWall = computed(() =>
+      (selIdx.value >= 0 && selIdx.value < walls.length) ? walls[selIdx.value] : null
+    );
+
+    const worldPoints = computed(() => {
+      const pts = [{ x:0, y:0 }];
+      for (const w of walls) {
+        const dv = dirVectors[w.direction];
+        if (!dv) { pts.push({...pts[pts.length-1]}); continue; }
+        const prev = pts[pts.length-1];
+        pts.push({
+          x: prev.x + dv.dx * w.length * pxPerMm.value,
+          y: prev.y + dv.dy * w.length * pxPerMm.value,
+        });
+      }
+      return pts;
+    });
+
+    const currentEndpoint = computed(() => worldPoints.value[worldPoints.value.length-1]);
+
+    const isRoomClosed = computed(() => {
+      if (walls.length < 3) return false;
+      const ep = currentEndpoint.value;
+      return Math.hypot(ep.x, ep.y) < 5;
+    });
+
+    const perimeter = computed(() =>
+      walls.filter(w => w.direction !== 'z').reduce((s,w) => s + w.length, 0)
+    );
+
+    const roomArea = computed(() => {
+      if (!isRoomClosed.value || walls.length < 3) return null;
+      const pts = worldPoints.value;
+      let area = 0;
+      for (let i=0; i<pts.length-1; i++) area += pts[i].x * pts[i+1].y - pts[i+1].x * pts[i].y;
+      return Math.abs(area) / 2 / 1_000_000;
+    });
+
+    const areaText = computed(() =>
+      roomArea.value !== null ? `${roomArea.value.toFixed(2)} m²` : '—'
+    );
+
+    const roomHeight = computed(() => {
+      for (const w of walls) if (w.direction==='z') return w.length;
+      return null;
+    });
+
+    const heightText = computed(() =>
+      roomHeight.value !== null ? fmtMm(roomHeight.value) : '—'
+    );
+
+    const scaleRatio = computed(() => {
+      const r = Math.round(1 / (pxPerMm.value * 1000 / 100));
+      if (r < 1) return '1:' + Math.round(1000 * pxPerMm.value);
+      return '1:' + r;
+    });
+
+    const photoMarkers = computed(() => {
+      const mks = [];
+      if (!selWall.value?.photos) return mks;
+      const pts = worldPoints.value;
+      const i = selIdx.value;
+      if (i<0 || i>=pts.length-1) return mks;
+      const p1=pts[i], p2=pts[i+1];
+      selWall.value.photos.forEach((_, pi) => {
+        const frac = 0.3 + pi * 0.2;
+        const wx = p1.x + (p2.x-p1.x) * frac;
+        const wy = p1.y + (p2.y-p1.y) * frac;
+        const s = worldToScreen(wx, wy);
+        mks.push({ x:s.x, y:s.y, dataUrl: selWall.value.photos[pi] });
+      });
+      return mks;
+    });
+
+    // ── Coordinate helpers ──
+    // IMPORTANT: canvasEl.width/height are physical pixels (width*dpr).
+    // We render with ctx.setTransform(dpr,0,0,dpr,0,0) so the logical
+    // coordinate system is CSS pixels. world/screen helpers must use CSS pixels.
+    function cssCanvasSize() {
+      const dpr = window.devicePixelRatio || 1;
+      return {
+        w: (canvasEl.value?.width || 600) / dpr,
+        h: (canvasEl.value?.height || 400) / dpr,
+      };
+    }
+    function worldToScreen(wx, wy) {
+      const { w, h } = cssCanvasSize();
+      return {
+        x: wx + w / 2 + panX.value,
+        y: wy + h / 2 + panY.value,
+      };
+    }
+    function screenToWorld(sx, sy) {
+      const { w, h } = cssCanvasSize();
+      return {
+        x: sx - w / 2 - panX.value,
+        y: sy - h / 2 - panY.value,
+      };
+    }
+
+    function flash(m) {
+      modeText.value = m;
+      clearTimeout(modeText._t);
+      modeText._t = setTimeout(() => { modeText.value = ''; }, 1600);
+    }
+
+    function toast(m) {
+      toastMsg.value = m;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toastMsg.value = ''; }, 2000);
+    }
+
+    // ── Auto-center logic ──
+    function centerOnEndpoint() {
+      if (!walls.length || !canvasEl.value) return;
+      const ep = currentEndpoint.value;
+      // pan offset so the endpoint (in world coords) maps to screen center (0,0 in pan terms)
+      panX.value = -ep.x;
+      panY.value = -ep.y;
+    }
+
+    function startIdleTimer() {
+      userPanned = false;
+      idleSinceLastAdd = Date.now();
+      if (!idleCheckInterval) {
+        idleCheckInterval = setInterval(() => {
+          if (!userPanned && walls.length > 0 && Date.now() - idleSinceLastAdd > 10000) {
+            centerOnEndpoint();
+            nextTick(render);
+            userPanned = false; // keep centered until next user action
+          }
+        }, 1000);
+      }
+    }
+
+    function onUserPan() {
+      userPanned = true;
+      startIdleTimer();
+    }
+
+    // ── Persistence ──
+    function loadWalls() {
+      try {
+        const raw = localStorage.getItem('rt2_walls');
+        if (raw) {
+          return JSON.parse(raw).map(w => ({
+            direction: w.direction,
+            length: w.length || 3000,
+            door: w.door || 'none',
+            window: w.window || 'none',
+            photos: w.photos || [],
+            notes: w.notes || '',
+            markers: (w.markers || []).map(m => ({
+              position: m.position ?? 0.5,
+              type: m.type || 'bump',
+              offset: m.offset || 0,
+              width: m.width || 100,
+              height: m.height || 0,
+              note: m.note || '',
+              photo: m.photo || null,
+            })),
+            elevation: w.elevation || { beamBottom:0, windowSill:0, windowTop:0, doorHeight:0, special:'' },
+          }));
+        }
+      } catch(e) {}
+      return [];
+    }
+
+    function save() {
+      localStorage.setItem('rt2_walls', JSON.stringify(walls));
+      localStorage.setItem('rt2_projectName', projectName.value);
+    }
+    watch(projectName, save);
+    watch(() => JSON.parse(JSON.stringify(walls)), save, { deep:true });
+
+    // ── Wall CRUD ──
+    function newWall(dir, len) {
+      return {
+        direction: dir,
+        length: Math.round(len),
+        door: 'none', window: 'none',
+        photos: [], notes: '', markers: [],
+        elevation: { beamBottom:0, windowSill:0, windowTop:0, doorHeight:0, special:'' },
+      };
+    }
+
+    function addWall(direction) {
+      const len = compassLen.value;
+      if (!len || len <= 0) { toast('请输入有效长度'); return; }
+      activeDir.value = direction;
+      walls.push(newWall(direction, len));
+      selIdx.value = walls.length - 1;
+      save();
+      centerOnEndpoint();
+      startIdleTimer();
+      nextTick(render);
+      flash('已添加');
+    }
+
+    function addWallRaw(dir, len) {
+      walls.push(newWall(dir, len));
+      selIdx.value = walls.length - 1;
+      save();
+      centerOnEndpoint();
+      startIdleTimer();
+      nextTick(render);
+      flash('已添加');
+    }
+
+    function undoWall() {
+      if (!walls.length) return;
+      walls.pop();
+      if (selIdx.value >= walls.length) selIdx.value = walls.length - 1;
+      if (walls.length > 0) {
+        centerOnEndpoint();
+        startIdleTimer();
+      }
+      save();
+      nextTick(render);
+      toast('已撤销');
+    }
+
+    function deleteWall(i) {
+      if (i<0 || i>=walls.length) return;
+      walls.splice(i, 1);
+      if (selIdx.value >= walls.length) selIdx.value = walls.length - 1;
+      if (walls.length > 0 && selIdx.value < 0) selIdx.value = walls.length - 1;
+      save();
+      nextTick(render);
+    }
+
+    function selectWall(i) {
+      selIdx.value = i;
+      // Don't force tab switch; stay on current or fall back to detail
+      if (activeTab.value !== 'detail' && activeTab.value !== 'notes' && activeTab.value !== 'photos') {
+        activeTab.value = 'detail';
+      }
+      nextTick(render);
+    }
+
+    function clearAll() {
+      if (!walls.length) return;
+      if (!confirm('确定清空全部墙体数据？此操作不可撤销。')) return;
+      walls.splice(0, walls.length);
+      selIdx.value = -1;
+      activeTab.value = 'list';
+      panX.value = 0; panY.value = 0;
+      userPanned = false;
+      save();
+      nextTick(render);
+      toast('已清空');
+    }
+
+    function closeRoom() {
+      if (walls.length < 2) { toast('至少需要 2 面墙'); return; }
+      const ep = currentEndpoint.value;
+      const distMm = Math.hypot(ep.x, ep.y) / pxPerMm.value;
+      if (distMm < 5) { toast('房间已闭合'); return; }
+      let dir = 'right';
+      if (ep.x < -1) dir = 'right';
+      else if (ep.x > 1) dir = 'left';
+      else if (ep.y < -1) dir = 'down';
+      else if (ep.y > 1) dir = 'up';
+      walls.push(newWall(dir, distMm));
+      selIdx.value = walls.length - 1;
+      save();
+      nextTick(render);
+      toast('房间已闭合');
+    }
+
+    function addMarker() {
+      if (!selWall.value) return;
+      if (!selWall.value.markers) selWall.value.markers = [];
+      selWall.value.markers.push({ position:0.5, type:'bump', offset:50, width:200, height:0, note:'', photo:null });
+      save();
+    }
+
+    // ── Photos ──
+    function takePhoto() {
+      if (!selWall.value || activeTab.value !== 'photos') { activeTab.value = 'photos'; nextTick(() => cameraInput.value?.click()); return; }
+      cameraInput.value?.click();
+    }
+    function pickPhoto() { galleryInput.value?.click(); }
+    function onPhotoTaken(e) {
+      const file = e.target.files?.[0];
+      if (!file || !selWall.value) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        if (!selWall.value.photos) selWall.value.photos = [];
+        selWall.value.photos.push(ev.target.result);
+        save(); nextTick(render); toast('照片已保存');
+      };
+      reader.readAsDataURL(file);
+      e.target.value = '';
+    }
+    function removePhoto(i) { selWall.value?.photos?.splice(i, 1); save(); nextTick(render); }
+    function previewPhoto(url) { previewUrl.value = url; }
+
+    // ── Rendering ──
+    function resizeCanvas() {
+      if (!canvasEl.value || !canvasWrap.value) return;
+      const r = canvasWrap.value.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvasEl.value.width = r.width * dpr;
+      canvasEl.value.height = r.height * dpr;
+      canvasEl.value.style.width = r.width + 'px';
+      canvasEl.value.style.height = r.height + 'px';
+      render();
+    }
+
+    function render() {
+      const cvs = canvasEl.value;
+      if (!cvs) return;
+      const ctx = cvs.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const cw = cvs.width / dpr;
+      const ch = cvs.height / dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cw, ch);
+      ctx.fillStyle = '#fafafa';
+      ctx.fillRect(0, 0, cw, ch);
+
+      // Grid
+      const grid1m = pxPerMm.value * 1000;
+      if (grid1m >= 24) {
+        const grid100 = pxPerMm.value * 100;
+        if (grid100 >= 16) {
+          ctx.strokeStyle = '#f2f2f7'; ctx.lineWidth = 0.5;
+          const sx100 = ((-panX.value - cw/2) % grid100 + grid100) % grid100;
+          const sy100 = ((-panY.value - ch/2) % grid100 + grid100) % grid100;
+          for (let x=sx100; x<cw; x+=grid100) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,ch); ctx.stroke(); }
+          for (let y=sy100; y<ch; y+=grid100) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(cw,y); ctx.stroke(); }
+        }
+        ctx.strokeStyle = '#e8e8ed'; ctx.lineWidth = 1;
+        const sx1m = ((-panX.value - cw/2) % grid1m + grid1m) % grid1m;
+        const sy1m = ((-panY.value - ch/2) % grid1m + grid1m) % grid1m;
+        for (let x=sx1m; x<cw; x+=grid1m) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,ch); ctx.stroke(); }
+        for (let y=sy1m; y<ch; y+=grid1m) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(cw,y); ctx.stroke(); }
+      }
+
+      // Origin
+      const origin = worldToScreen(0, 0);
+      ctx.strokeStyle = '#e8e8ed'; ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath(); ctx.moveTo(origin.x,0); ctx.lineTo(origin.x,ch);
+      ctx.moveTo(0, origin.y); ctx.lineTo(cw, origin.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#aeaeb2';
+      ctx.beginPath(); ctx.arc(origin.x, origin.y, 4, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#6e6e73';
+      ctx.font = '11px -apple-system, sans-serif';
+      ctx.fillText('起点', origin.x+9, origin.y-6);
+
+      if (!walls.length) return;
+
+      const pts = worldPoints.value;
+      const ep = pts[pts.length-1];
+
+      if (isRoomClosed.value) {
+        ctx.fillStyle = 'rgba(0,113,227,.045)';
+        ctx.beginPath();
+        const p0 = worldToScreen(pts[0].x, pts[0].y);
+        ctx.moveTo(p0.x, p0.y);
+        for (let i=1; i<pts.length; i++) { const p=worldToScreen(pts[i].x,pts[i].y); ctx.lineTo(p.x,p.y); }
+        ctx.closePath(); ctx.fill();
+      }
+
+      for (let i=0; i<walls.length; i++) {
+        const w = walls[i];
+        if (w.direction === 'z') continue;
+        const p1 = worldToScreen(pts[i].x, pts[i].y);
+        const p2 = worldToScreen(pts[i+1].x, pts[i+1].y);
+        const isSel = i === selIdx.value;
+        const dx = p2.x-p1.x, dy = p2.y-p1.y;
+        const segLen = Math.hypot(dx, dy);
+        if (segLen < 1) continue;
+        const nx = -dy/segLen, ny = dx/segLen;
+
+        if (isSel) {
+          ctx.strokeStyle = 'rgba(0,113,227,.12)'; ctx.lineWidth = 14; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+        }
+        ctx.strokeStyle = isSel ? '#0071e3' : '#1d1d1f';
+        ctx.lineWidth = isSel ? 3 : 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+
+        if (w.door && w.door !== 'none') drawDoor(ctx, p1, p2, nx, ny, w.door);
+        if (w.window && w.window !== 'none') drawWindow(ctx, p1, p2, nx, ny, w.window);
+        if (w.markers?.length) drawMarkers(ctx, p1, p2, nx, ny, w.markers);
+        drawDimLabel(ctx, p1, p2, nx, ny, w.length);
+
+        ctx.fillStyle = isSel ? '#0071e3' : '#6e6e73';
+        ctx.beginPath(); ctx.arc(p1.x, p1.y, 3, 0, Math.PI*2); ctx.fill();
+
+        if (i === walls.length-1) {
+          ctx.fillStyle = '#ff3b30';
+          ctx.beginPath(); ctx.arc(p2.x, p2.y, 6, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = 'rgba(255,59,48,.22)'; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(p2.x, p2.y, 9, 0, Math.PI*2); ctx.stroke();
+        }
+      }
+
+      // Height annotation (fixed position near origin)
+      if (roomHeight.value !== null) {
+        const ho = worldToScreen(0, -38);
+        ctx.fillStyle = '#6e6e73'; ctx.font = '12px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`层高 ${fmtMm(roomHeight.value)}`, ho.x, ho.y);
+        ctx.textAlign = 'start';
+      }
+
+      // Drag preview
+      if (isDragging && dragDir && dragLength >= 10) {
+        const dv = dirVectors[dragDir];
+        const ex = ep.x + dv.dx * dragLength * pxPerMm.value;
+        const ey = ep.y + dv.dy * dragLength * pxPerMm.value;
+        const dp1 = worldToScreen(ep.x, ep.y);
+        const dp2 = worldToScreen(ex, ey);
+        ctx.strokeStyle = 'rgba(0,113,227,.45)'; ctx.lineWidth = 2;
+        ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.moveTo(dp1.x,dp1.y); ctx.lineTo(dp2.x,dp2.y); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(0,113,227,.82)';
+        ctx.font = 'bold 13px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(fmtMm(dragLength), (dp1.x+dp2.x)/2, (dp1.y+dp2.y)/2-12);
+        ctx.textAlign = 'start';
+      }
+    }
+
+    function drawDoor(ctx, p1, p2, nx, ny, pos) {
+      const frac = pos==='start'?.2 : pos==='middle'?.5 : .8;
+      const cx = p1.x+(p2.x-p1.x)*frac, cy = p1.y+(p2.y-p1.y)*frac;
+      const r = 26;
+      ctx.strokeStyle = '#ff9500'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      const aS = Math.atan2(-ny, -nx);
+      const aE = aS + (ny>0||nx<0 ? -Math.PI/2 : Math.PI/2);
+      ctx.arc(cx, cy, r, aS, aE); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx+Math.cos(aE)*r, cy+Math.sin(aE)*r); ctx.stroke();
+      ctx.fillStyle = '#fafafa'; ctx.beginPath(); ctx.arc(cx, cy, 3.5, 0, Math.PI*2); ctx.fill();
+    }
+
+    function drawWindow(ctx, p1, p2, nx, ny, pos) {
+      const frac = pos==='start'?.25 : pos==='middle'?.5 : .75;
+      const cx = p1.x+(p2.x-p1.x)*frac, cy = p1.y+(p2.y-p1.y)*frac;
+      const wh = 17;
+      const dx=p2.x-p1.x, dy=p2.y-p1.y;
+      const sl = Math.hypot(dx, dy);
+      if (sl<1) return;
+      const ux=dx/sl, uy=dy/sl;
+      ctx.strokeStyle = '#34c759'; ctx.lineWidth = 1.5;
+      for (let s=-1; s<=1; s+=2) {
+        ctx.beginPath();
+        ctx.moveTo(cx-ux*wh+nx*s*3, cy-uy*wh+ny*s*3);
+        ctx.lineTo(cx+ux*wh+nx*s*3, cy+uy*wh+ny*s*3); ctx.stroke();
+      }
+      ctx.lineWidth = 1.2;
+      for (let t=-.6; t<=.6; t+=.3) {
+        ctx.beginPath();
+        ctx.moveTo(cx+ux*wh*t-nx*3, cy+uy*wh*t-ny*3);
+        ctx.lineTo(cx+ux*wh*t+nx*3, cy+uy*wh*t+ny*3); ctx.stroke();
+      }
+    }
+
+    function drawMarkers(ctx, p1, p2, nx, ny, markers) {
+      for (const m of markers) {
+        const cx = p1.x+(p2.x-p1.x)*m.position;
+        const cy = p1.y+(p2.y-p1.y)*m.position;
+        const colors = { bump:'#ff9500', dent:'#0071e3', beam:'#ff3b30', pillar:'#af52de', corner:'#ff9500', other:'#6e6e73' };
+        const color = colors[m.type] || '#6e6e73';
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(cx, cy, 4.5, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(cx, cy, 4.5, 0, Math.PI*2); ctx.stroke();
+        if (m.offset && m.offset > 1) {
+          const mx = cx + nx * m.offset * pxPerMm.value;
+          const my = cy + ny * m.offset * pxPerMm.value;
+          ctx.strokeStyle = color; ctx.lineWidth = 1;
+          ctx.setLineDash([2,2]);
+          ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(mx,my); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = color;
+          ctx.beginPath(); ctx.arc(mx, my, 2.5, 0, Math.PI*2); ctx.fill();
+        }
+      }
+    }
+
+    function drawDimLabel(ctx, p1, p2, nx, ny, lenMm) {
+      const mx=(p1.x+p2.x)/2, my=(p1.y+p2.y)/2;
+      const off=20;
+      const lx=mx+nx*off, ly=my+ny*off;
+      ctx.strokeStyle = '#d2d2d7'; ctx.lineWidth = 0.5;
+      ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(lx,ly); ctx.stroke();
+      ctx.setLineDash([]);
+      const text = fmtMm(lenMm);
+      ctx.font = 'bold 11px -apple-system, sans-serif';
+      const tw = ctx.measureText(text).width;
+      const pad=6, th=15;
+      ctx.fillStyle = 'rgba(255,255,255,.92)';
+      ctx.beginPath();
+      const x0=lx-tw/2-pad, y0=ly-th/2-pad, w0=tw+pad*2, h0=th+pad*2, r=4;
+      ctx.moveTo(x0+r, y0);
+      ctx.lineTo(x0+w0-r, y0);
+      ctx.quadraticCurveTo(x0+w0, y0, x0+w0, y0+r);
+      ctx.lineTo(x0+w0, y0+h0-r);
+      ctx.quadraticCurveTo(x0+w0, y0+h0, x0+w0-r, y0+h0);
+      ctx.lineTo(x0+r, y0+h0);
+      ctx.quadraticCurveTo(x0, y0+h0, x0, y0+h0-r);
+      ctx.lineTo(x0, y0+r);
+      ctx.quadraticCurveTo(x0, y0, x0+r, y0);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#1d1d1f';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(text, lx, ly);
+      ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+    }
+
+    // ── Zoom ──
+    function zoom(f) { pxPerMm.value = Math.max(0.01, Math.min(2, pxPerMm.value * f)); nextTick(render); onUserPan(); }
+    function zoomFit() {
+      if (!walls.length) { pxPerMm.value = 0.08; panX.value = 0; panY.value = 0; nextTick(render); return; }
+      const pts = worldPoints.value;
+      let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+      for (const p of pts) { minX=Math.min(minX,p.x); minY=Math.min(minY,p.y); maxX=Math.max(maxX,p.x); maxY=Math.max(maxY,p.y); }
+      const ww = maxX-minX+80, wh = maxY-minY+80;
+      const { w:cw, h:ch } = cssCanvasSize();
+      pxPerMm.value = Math.max(0.01, Math.min(2, Math.min(cw/ww, ch/wh)));
+      panX.value = -(minX+maxX)/2;
+      panY.value = -(minY+maxY)/2;
+      onUserPan();
+      nextTick(render);
+    }
+
+    // ── Canvas Events ──
+    function ptDistToSeg(px,py,x1,y1,x2,y2){
+      const dx=x2-x1, dy=y2-y1, ls=dx*dx+dy*dy;
+      if(ls===0) return Math.hypot(px-x1, py-y1);
+      const t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/ls));
+      return Math.hypot(px-x1-t*dx, py-y1-t*dy);
+    }
+    function findWallAt(sx,sy){
+      if(!walls.length) return -1;
+      const pts=worldPoints.value;
+      let best=-1, bd=16;
+      for(let i=0;i<walls.length;i++){
+        if(walls[i].direction==='z') continue;
+        const p1=worldToScreen(pts[i].x,pts[i].y);
+        const p2=worldToScreen(pts[i+1].x,pts[i+1].y);
+        const d=ptDistToSeg(sx,sy,p1.x,p1.y,p2.x,p2.y);
+        if(d<bd){ bd=d; best=i; }
+      }
+      return best;
+    }
+    function canvasPos(e){
+      const r=canvasEl.value.getBoundingClientRect();
+      return {x:e.clientX-r.left, y:e.clientY-r.top};
+    }
+
+    // Mouse — now pan on left-click drag too (space not needed on desktop)
+    function onCanvasMouse(e){
+      const p=canvasPos(e);
+      if(e.type==='mousedown'){
+        // Middle button, Alt+left, or Space = pan
+        if(e.button===1||(e.button===0&&(e.altKey||spaceHeld))){
+          isPanning=true;
+          panStart={x:e.clientX,y:e.clientY};
+          panStartOffset={x:panX.value,y:panY.value};
+          return;
+        }
+        if(e.button!==0) return;
+
+        // Check wall click first
+        const wi=findWallAt(p.x,p.y);
+        if(wi>=0){ selectWall(wi); return; }
+
+        // Start drag from endpoint
+        if(walls.length>0){
+          const cp=worldToScreen(currentEndpoint.value.x, currentEndpoint.value.y);
+          if(Math.hypot(p.x-cp.x, p.y-cp.y)<26){
+            isDragging=true; dragDir=null; dragLength=0; return;
+          }
+        }
+        // If nothing hit, start panning (desktop: drag to pan)
+        isPanning=true;
+        panStart={x:e.clientX,y:e.clientY};
+        panStartOffset={x:panX.value,y:panY.value};
+      }
+      if(e.type==='mousemove'){
+        if(isPanning){
+          panX.value=panStartOffset.x+(e.clientX-panStart.x);
+          panY.value=panStartOffset.y+(e.clientY-panStart.y);
+          onUserPan();
+          nextTick(render); return;
+        }
+        if(isDragging&&walls.length>0){
+          const w=screenToWorld(p.x,p.y);
+          const ep=currentEndpoint.value;
+          const dx=w.x-ep.x, dy=w.y-ep.y;
+          const adx=Math.abs(dx), ady=Math.abs(dy);
+          dragDir = adx>ady ? (dx>0?'right':'left') : (dy>0?'down':'up');
+          dragLength = (adx>ady?adx:ady)/pxPerMm.value;
+          nextTick(render); return;
+        }
+      }
+      if(e.type==='mouseup'){
+        if(isPanning){ isPanning=false; return; }
+        if(isDragging){
+          isDragging=false;
+          if(dragDir&&dragLength>=10) addWallRaw(dragDir, dragLength);
+          dragDir=null; dragLength=0;
+        }
+      }
+    }
+
+    function onCanvasMouseUp(){
+      if(isDragging){ isDragging=false; if(dragDir&&dragLength>=10) addWallRaw(dragDir, dragLength); dragDir=null; dragLength=0; nextTick(render); }
+      isPanning=false;
+    }
+
+    // Space key panning
+    let spaceHeld = false;
+    window.addEventListener('keydown', e => { if(e.code==='Space'&&e.target===document.body) { e.preventDefault(); spaceHeld=true; } });
+    window.addEventListener('keyup', e => { if(e.code==='Space') spaceHeld=false; });
+
+    function onCanvasTouch(e){
+      if(e.touches.length===2){
+        if(!isPanning){
+          isPanning=true;
+          panStart={x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2};
+          panStartOffset={x:panX.value,y:panY.value};
+          touches0=[{clientX:e.touches[0].clientX,clientY:e.touches[0].clientY},
+                    {clientX:e.touches[1].clientX,clientY:e.touches[1].clientY}];
+        }else if(touches0){
+          const cx=(e.touches[0].clientX+e.touches[1].clientX)/2;
+          const cy=(e.touches[0].clientY+e.touches[1].clientY)/2;
+          panX.value=panStartOffset.x+(cx-panStart.x);
+          panY.value=panStartOffset.y+(cy-panStart.y);
+          const d0=Math.hypot(touches0[0].clientX-touches0[1].clientX, touches0[0].clientY-touches0[1].clientY);
+          const d1=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+          if(d0>0) pxPerMm.value=Math.max(0.01, Math.min(2, pxPerMm.value*(d1/d0)));
+          touches0=[{clientX:e.touches[0].clientX,clientY:e.touches[0].clientY},
+                    {clientX:e.touches[1].clientX,clientY:e.touches[1].clientY}];
+        }
+        onUserPan();
+        nextTick(render); return;
+      }
+      if(e.touches.length===1&&e.type==='touchstart'){
+        const r=canvasEl.value.getBoundingClientRect();
+        const pos={x:e.touches[0].clientX-r.left, y:e.touches[0].clientY-r.top};
+        const wi=findWallAt(pos.x,pos.y);
+        if(wi>=0){ selectWall(wi); return; }
+        if(walls.length>0){
+          const cp=worldToScreen(currentEndpoint.value.x, currentEndpoint.value.y);
+          if(Math.hypot(pos.x-cp.x, pos.y-cp.y)<30){
+            isDragging=true; dragDir=null; dragLength=0; return;
+          }
+        }
+      }
+      if(e.touches.length===1&&e.type==='touchmove'&&isDragging){
+        const r=canvasEl.value.getBoundingClientRect();
+        const pos={x:e.touches[0].clientX-r.left, y:e.touches[0].clientY-r.top};
+        const w=screenToWorld(pos.x,pos.y);
+        const ep=currentEndpoint.value;
+        const dx=w.x-ep.x, dy=w.y-ep.y;
+        const adx=Math.abs(dx), ady=Math.abs(dy);
+        dragDir=adx>ady?(dx>0?'right':'left'):(dy>0?'down':'up');
+        dragLength=(adx>ady?adx:ady)/pxPerMm.value;
+        nextTick(render);
+      }
+    }
+
+    function onCanvasTouchEnd(e){
+      if(e.touches.length===0){
+        if(isDragging&&dragDir&&dragLength>=10) addWallRaw(dragDir, dragLength);
+        isDragging=false; isPanning=false;
+        dragDir=null; dragLength=0; touches0=null;
+        nextTick(render);
+      }
+    }
+
+    function onCanvasWheel(e){
+      const r=canvasEl.value.getBoundingClientRect();
+      const mx=e.clientX-r.left, my=e.clientY-r.top;
+      const f=e.deltaY<0?1.12:0.88;
+      const wb=screenToWorld(mx,my);
+      pxPerMm.value=Math.max(0.01, Math.min(2, pxPerMm.value*f));
+      const wa=screenToWorld(mx,my);
+      panX.value+=wa.x-wb.x;
+      panY.value+=wa.y-wb.y;
+      onUserPan();
+      nextTick(render);
+    }
+
+    // ── Project Export / Import ──
+    async function exportProject() {
+      if (!walls.length) { toast('请先添加墙体数据'); return; }
+      try {
+        const zip = new JSZip();
+
+        // Build clean JSON (strip data URLs from photos to save separately)
+        const cleanWalls = walls.map(w => {
+          const wc = { ...w };
+          if (wc.photos && wc.photos.length > 0) {
+            wc._photosCount = wc.photos.length;
+            wc.photos = wc.photos.map((_, pi) => `photos/wall_${walls.indexOf(w)}_${pi}.jpg`);
+          }
+          return wc;
+        });
+
+        const projectJSON = JSON.stringify({
+          version: 2,
+          projectName: projectName.value,
+          exportDate: new Date().toISOString(),
+          walls: cleanWalls,
+        }, null, 2);
+
+        zip.file('project.json', projectJSON);
+
+        // Add photos
+        const photoFolder = zip.folder('photos');
+        let photoCount = 0;
+        for (let i = 0; i < walls.length; i++) {
+          const w = walls[i];
+          if (w.photos && w.photos.length) {
+            for (let pi = 0; pi < w.photos.length; pi++) {
+              const dataUrl = w.photos[pi];
+              if (dataUrl.startsWith('data:')) {
+                const base64 = dataUrl.split(',')[1];
+                photoFolder.file(`wall_${i}_${pi}.jpg`, base64, { base64: true });
+                photoCount++;
+              }
+            }
+          }
+        }
+
+        const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE',
+          compressionOptions: { level: 6 } });
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${projectName.value || '量房项目'}_${new Date().toISOString().slice(0,10)}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast(`项目已打包 (${photoCount} 张照片)`);
+      } catch (err) {
+        toast('打包失败: ' + err.message);
+        console.error(err);
+      }
+    }
+
+    function triggerImport() { showImport.value = true; }
+    function clickImportFile() { importInput.value?.click(); }
+
+    function onImportFile(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      importZipFile(file);
+      e.target.value = '';
+      showImport.value = false;
+    }
+
+    function onDropImport(e) {
+      const file = e.dataTransfer?.files?.[0];
+      if (!file || !file.name.endsWith('.zip')) return;
+      importZipFile(file);
+      showImport.value = false;
+    }
+
+    async function importZipFile(file) {
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const projectFile = zip.file('project.json');
+        if (!projectFile) { toast('无效的项目文件'); return; }
+
+        const jsonText = await projectFile.async('text');
+        const projectData = JSON.parse(jsonText);
+
+        // Restore walls
+        const loadedWalls = projectData.walls.map((w, i) => {
+          const wall = { ...w };
+          // Restore photo references — load actual images from zip
+          if (wall._photosCount && wall.photos) {
+            wall.photos = []; // will be repopulated
+            wall._pendingPhotos = true;
+            wall._photoPaths = Array.isArray(wall.photos) ? [...wall.photos] : [];
+          } else if (!wall.photos) {
+            wall.photos = [];
+          }
+          delete wall._photosCount;
+          return wall;
+        });
+
+        // Load photos from zip
+        for (let i = 0; i < loadedWalls.length; i++) {
+          const w = loadedWalls[i];
+          if (w._pendingPhotos) {
+            delete w._pendingPhotos;
+            const paths = w._photoPaths || [];
+            delete w._photoPaths;
+            w.photos = [];
+            for (const photoPath of paths) {
+              const photoFile = zip.file(photoPath);
+              if (photoFile) {
+                const base64 = await photoFile.async('base64');
+                w.photos.push(`data:image/jpeg;base64,${base64}`);
+              }
+            }
+          }
+        }
+
+        // Replace walls
+        walls.splice(0, walls.length);
+        loadedWalls.forEach(w => walls.push(w));
+        projectName.value = projectData.projectName || '导入项目';
+        selIdx.value = walls.length > 0 ? walls.length - 1 : -1;
+        activeTab.value = 'list';
+        save();
+        nextTick(() => {
+          zoomFit();
+          nextTick(render);
+        });
+        const photoCount = walls.reduce((s, w) => s + (w.photos?.length || 0), 0);
+        toast(`项目已导入 (${walls.length} 面墙, ${photoCount} 张照片)`);
+      } catch (err) {
+        toast('导入失败: ' + err.message);
+        console.error(err);
+      }
+    }
+
+    // ── Export (JPG/PDF) ──
+    function createExportCanvas(){
+      const a4W=210, a4H=297, dpi=150;
+      const ec=document.createElement('canvas');
+      ec.width=Math.round(a4W/25.4*dpi);
+      ec.height=Math.round(a4H/25.4*dpi);
+      const ectx=ec.getContext('2d');
+      ectx.fillStyle='#fff'; ectx.fillRect(0,0,ec.width,ec.height);
+      if(!walls.length) return ec;
+
+      const pts=worldPoints.value;
+      let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+      for(const p of pts){ minX=Math.min(minX,p.x); minY=Math.min(minY,p.y); maxX=Math.max(maxX,p.x); maxY=Math.max(maxY,p.y); }
+      const ww=maxX-minX||100, wh=maxY-minY||100;
+      const margin=ec.width*.12;
+      const availW=ec.width-margin*2, availH=ec.height-margin*2-110;
+      const es=Math.min(availW/ww, availH/wh);
+      const ox=margin+(availW-ww*es)/2-minX*es;
+      const oy=margin+90+(availH-wh*es)/2-minY*es;
+      const ex=wx=>wx*es+ox;
+      const ey=wy=>wy*es+oy;
+
+      ectx.fillStyle='#1d1d1f';
+      ectx.font=`bold ${Math.round(ec.width*.025)}px -apple-system,"PingFang SC",sans-serif`;
+      ectx.textAlign='center';
+      ectx.fillText(projectName.value||'未命名项目', ec.width/2, margin+36);
+      ectx.font=`${Math.round(ec.width*.013)}px -apple-system,sans-serif`;
+      ectx.fillStyle='#6e6e73';
+      ectx.fillText(new Date().toLocaleDateString('zh-CN')+'  比例 1:'+scaleRatio.value, ec.width/2, margin+62);
+      ectx.textAlign='start';
+
+      const lw=Math.max(2,ec.width*.003);
+      for(let i=0;i<walls.length;i++){
+        const w=walls[i];
+        if(w.direction==='z') continue;
+        const x1=ex(pts[i].x), y1=ey(pts[i].y);
+        const x2=ex(pts[i+1].x), y2=ey(pts[i+1].y);
+        ectx.strokeStyle='#1d1d1f'; ectx.lineWidth=lw; ectx.lineCap='round';
+        ectx.beginPath(); ectx.moveTo(x1,y1); ectx.lineTo(x2,y2); ectx.stroke();
+
+        const mx=(x1+x2)/2, my=(y1+y2)/2;
+        const dx=x2-x1, dy=y2-y1, sl=Math.hypot(dx,dy);
+        if(sl>0){
+          const nx=-dy/sl, ny=dx/sl;
+          const lx=mx+nx*ec.width*.035, ly=my+ny*ec.width*.035;
+          ectx.fillStyle='#1d1d1f';
+          ectx.font=`bold ${Math.round(ec.width*.015)}px -apple-system,sans-serif`;
+          ectx.textAlign='center'; ectx.textBaseline='middle';
+          ectx.fillText(fmtMm(w.length), lx, ly);
+          ectx.textAlign='start'; ectx.textBaseline='alphabetic';
+        }
+      }
+      if(roomHeight.value!==null){
+        ectx.fillStyle='#6e6e73';
+        ectx.font=`${Math.round(ec.width*.014)}px -apple-system,sans-serif`;
+        ectx.textAlign='center';
+        ectx.fillText(`层高: ${fmtMm(roomHeight.value)}`, ex(pts[0].x), ey(pts[0].y)-28);
+        ectx.textAlign='start';
+      }
+      return ec;
+    }
+
+    function exportJPG(){
+      if(!walls.length){ toast('请先添加墙体'); return; }
+      createExportCanvas().toBlob(blob=>{
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a');
+        a.href=url;
+        a.download=`${projectName.value||'户型图'}_${new Date().toISOString().slice(0,10)}.jpg`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('JPG 已导出');
+      },'image/jpeg',.92);
+    }
+
+    function exportPDF(){
+      if(!walls.length){ toast('请先添加墙体'); return; }
+      const dataUrl=createExportCanvas().toDataURL('image/png');
+      const pw=window.open('','_blank');
+      pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${projectName.value||'户型图'}</title><style>*{margin:0;padding:0}html,body{width:100%;height:100%}body{display:flex;align-items:center;justify-content:center;background:#fff}img{max-width:100%;max-height:100%;object-fit:contain}@page{size:A4;margin:0}@media print{body{margin:0}img{width:100%;page-break-after:avoid}}</style></head><body><img src="${dataUrl}" onload="setTimeout(()=>{window.print();setTimeout(()=>window.close(),500)},300)"></body></html>`);
+      pw.document.close();
+    }
+
+    // ── Keyboard ──
+    function onKeyDown(e){
+      if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT') return;
+      const km={ArrowRight:'right',ArrowLeft:'left',ArrowUp:'up',ArrowDown:'down',z:'z',Z:'z'};
+      const d=km[e.key];
+      if(d){
+        e.preventDefault();
+        if (walls.length > 0) {
+          // Use compass input value for keyboard entries
+          const len = compassLen.value;
+          if (len && len > 0) { addWallRaw(d, len); return; }
+        }
+        const len=prompt(`输入 ${dirMap[d]?.icon || d} 方向长度 (mm):`,'3000');
+        if(len!==null){ const v=parseFloat(len); if(!isNaN(v)&&v>0) addWallRaw(d,v); }
+        return;
+      }
+      if(e.key==='Delete'||e.key==='Backspace'){
+        if(selIdx.value>=0){ e.preventDefault(); deleteWall(selIdx.value); toast('已删除'); }
+        return;
+      }
+      if((e.ctrlKey||e.metaKey)&&e.key==='z'){ e.preventDefault(); undoWall(); return; }
+      if(e.key==='Escape'){ selIdx.value=-1; activeTab.value='list'; nextTick(render); return; }
+    }
+
+    // ── Lifecycle ──
+    onMounted(()=>{
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+      window.addEventListener('keydown', onKeyDown);
+      if(selIdx.value>=0&&selIdx.value<walls.length) activeTab.value='list';
+      if(walls.length > 0) { centerOnEndpoint(); startIdleTimer(); }
+    });
+    onUnmounted(()=>{
+      window.removeEventListener('resize', resizeCanvas);
+      window.removeEventListener('keydown', onKeyDown);
+      if(idleCheckInterval) clearInterval(idleCheckInterval);
+    });
+
+    return {
+      projectName, walls, selIdx, activeTab, compassLen, activeDir,
+      selWall, dirMap, markerLabels, fmtMm,
+      isRoomClosed, perimeter, areaText, heightText, scaleRatio, photoMarkers,
+      toastMsg, previewUrl, modeText, showImport,
+      pxPerMm, panX, panY,
+      canvasEl, canvasWrap, cameraInput, galleryInput, importInput,
+      addWall, deleteWall, selectWall, undoWall, clearAll, closeRoom, addMarker,
+      takePhoto, pickPhoto, onPhotoTaken, removePhoto, previewPhoto,
+      zoom, zoomFit, exportJPG, exportPDF,
+      exportProject, triggerImport, clickImportFile, onImportFile, onDropImport,
+      onCanvasMouse, onCanvasMouseUp, onCanvasTouch, onCanvasTouchEnd, onCanvasWheel,
+      save,
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
